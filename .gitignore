@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.expo/
+.expo-shared/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/*
+!.vscode/settings.json
+*.tsbuildinfo

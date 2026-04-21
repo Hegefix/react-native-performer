@@ -1,0 +1,53 @@
+{
+  "name": "react-native-performer",
+  "version": "0.0.0",
+  "description": "Zero-config rerender detection and overlay for React Native (Fabric + Hermes).",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "source": "src/index.ts",
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "private": false,
+  "license": "MIT",
+  "author": "Viktor Krasnohorskiy",
+  "sideEffects": false,
+  "keywords": [
+    "react-native",
+    "performance",
+    "rerender",
+    "fabric",
+    "new-architecture",
+    "devtools",
+    "profiler",
+    "fiber"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hegefix/react-native-performer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Hegefix/react-native-performer/issues"
+  },
+  "homepage": "https://github.com/Hegefix/react-native-performer#readme",
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-native": ">=0.74.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/react": "^18.3.28",
+    "react": "^18.3.1",
+    "react-native": "^0.76.9"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}
