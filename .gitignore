@@ -1,8 +1,6 @@
 node_modules/
 dist/
 coverage/
-.expo/
-.expo-shared/
 *.log
 .DS_Store
 .env
@@ -12,3 +10,9 @@ coverage/
 .vscode/*
 !.vscode/settings.json
 *.tsbuildinfo
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions

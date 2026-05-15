@@ -1,0 +1,13 @@
+{
+  "name": "@performer/sdk",
+  "version": "0.0.1",
+  "description": "Rerender prevention primitives for React Native (coming soon).",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "scripts": {
+    "build": "echo 'no-op'",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'no tests yet'"
+  }
+}

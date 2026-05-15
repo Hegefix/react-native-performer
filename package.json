@@ -1,44 +1,10 @@
 {
   "name": "react-native-performer",
-  "version": "0.1.0",
-  "description": "Zero-config rerender detection and overlay for React Native (Fabric + Hermes).",
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
-  "types": "dist/index.d.ts",
-  "source": "src/index.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
-    },
-    "./auto": {
-      "types": "./dist/auto.d.ts",
-      "import": "./dist/auto.mjs",
-      "require": "./dist/auto.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "dist",
-    "src",
-    "README.md",
-    "LICENSE"
+  "private": true,
+  "workspaces": [
+    "packages/*"
   ],
-  "private": false,
-  "license": "MIT",
-  "author": "Viktor Krasnohorskiy",
-  "sideEffects": false,
-  "keywords": [
-    "react-native",
-    "performance",
-    "rerender",
-    "fabric",
-    "new-architecture",
-    "devtools",
-    "profiler",
-    "fiber"
-  ],
+  "packageManager": "yarn@3.6.4",
   "engines": {
     "node": ">=18"
   },
@@ -50,20 +16,10 @@
     "url": "https://github.com/Hegefix/react-native-performer/issues"
   },
   "homepage": "https://github.com/Hegefix/react-native-performer#readme",
-  "peerDependencies": {
-    "react": ">=18.0.0",
-    "react-native": ">=0.74.0"
-  },
-  "devDependencies": {
-    "@types/react": "^18.3.28",
-    "react": "^18.3.1",
-    "react-native": "^0.76.9",
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
-  },
+  "license": "MIT",
   "scripts": {
-    "build": "tsup",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+    "build": "yarn workspaces foreach -A run build",
+    "typecheck": "yarn workspaces foreach -A run typecheck",
+    "test": "yarn workspaces foreach -A run test"
   }
 }

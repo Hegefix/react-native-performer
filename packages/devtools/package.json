@@ -1,0 +1,72 @@
+{
+  "name": "@performer/devtools",
+  "version": "0.1.0",
+  "description": "Rerender detection, flash overlay, and diagnostic HUD for React Native.",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "source": "src/index.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./auto": {
+      "source": "./src/auto.ts",
+      "types": "./dist/auto.d.ts",
+      "import": "./dist/auto.mjs",
+      "require": "./dist/auto.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "license": "MIT",
+  "author": "Viktor Krasnohorskiy",
+  "sideEffects": [
+    "./dist/auto.*",
+    "./src/auto.*"
+  ],
+  "keywords": [
+    "react-native",
+    "performance",
+    "rerender",
+    "devtools",
+    "profiler",
+    "fiber",
+    "fabric"
+  ],
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-native": ">=0.74.0",
+    "react-native-reanimated": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react-native-reanimated": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@types/react": "^18.3.28",
+    "jest": "^29.7.0",
+    "jest-util": "^29.7.0",
+    "react": "^18.3.1",
+    "react-native": "^0.76.9",
+    "ts-jest": "^29.3.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "prepublishOnly": "npm run build"
+  }
+}

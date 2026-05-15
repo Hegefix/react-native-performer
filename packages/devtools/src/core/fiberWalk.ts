@@ -2,9 +2,14 @@ import type { RenderedFiberInfo } from './types';
 
 type Fiber = any;
 
+export type EnrichedFiberInfo = RenderedFiberInfo & {
+  fiber: Fiber;
+  depth: number;
+};
+
 export type WalkResult = {
   total: number;
-  rendered: RenderedFiberInfo[];
+  rendered: EnrichedFiberInfo[];
 };
 
 export type WalkOptions = {
@@ -18,7 +23,7 @@ export function walkFiberTree(
 ): WalkResult {
   const result: WalkResult = { total: 0, rendered: [] };
 
-  const visit = (node: Fiber | null | undefined): void => {
+  const visit = (node: Fiber | null | undefined, depth: number): void => {
     if (!node) return;
     result.total++;
 
@@ -30,16 +35,18 @@ export function walkFiberTree(
             name: getFiberName(node),
             isMount: !node.alternate,
             propsKeys: node.memoizedProps ? Object.keys(node.memoizedProps) : [],
+            fiber: node,
+            depth,
           });
         }
       }
     }
 
-    if (node.child) visit(node.child);
-    if (node.sibling) visit(node.sibling);
+    if (node.child) visit(node.child, depth + 1);
+    if (node.sibling) visit(node.sibling, depth);
   };
 
-  visit(root);
+  visit(root, 0);
   return result;
 }
 

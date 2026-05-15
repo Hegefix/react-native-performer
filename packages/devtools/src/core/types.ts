@@ -48,3 +48,59 @@ export type AttachOptions = {
    */
   skipHostComponents?: boolean;
 };
+
+// --- Layer 1: Render categorization ---
+
+export type RenderReason =
+  | { type: 'mount' }
+  | { type: 'props-changed'; keys: string[] }
+  | { type: 'state-changed' }
+  | { type: 'parent-rerender' }
+  | { type: 'context-changed'; provider: string }
+  | { type: 'force-update' };
+
+export type RerenderEvent = {
+  commitId: number;
+  timestamp: number;
+  component: {
+    name: string;
+    fiberTag: number;
+    depth: number;
+  };
+  reason: RenderReason;
+  renderCount: number;
+  isUnnecessary: boolean;
+};
+
+export type RerenderListener = (event: RerenderEvent) => void;
+
+// --- Filtering ---
+
+export type FilterConfig = {
+  ignoreComponents?: string[];
+  ignorePatterns?: RegExp[];
+  ignoreHostComponents?: boolean;
+  onlyUnnecessary?: boolean;
+  minRenderCount?: number;
+  maxDepth?: number;
+};
+
+// --- Layer 2: Overlay ---
+
+export type OverlayOptions = {
+  colorScale?: 'default' | 'colorblind';
+  minSeverity?: 'all' | 'warning' | 'critical';
+  showUnnecessaryOnly?: boolean;
+  opacity?: number;
+  enabled?: boolean;
+};
+
+// --- Layer 3: HUD ---
+
+export type HUDOptions = {
+  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  defaultTab?: 'offenders' | 'timeline' | 'inspector';
+  updateInterval?: number;
+  maxCommits?: number;
+  enabled?: boolean;
+};
