@@ -1,47 +1,89 @@
 import type { RenderReason } from '../core/types';
-import { diffProps } from './propDiff';
+import { FiberTag, type Fiber, type Hook } from '../core/fiber';
+import { compareProps } from './propDiff';
 import { detectContextChange } from './contextDetect';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Fiber = any;
-
-const FORCE_UPDATE_FLAG = 0b0000000100000000000000000000;
+const HOOK_LIST_TAGS: ReadonlySet<number> = new Set([
+  FiberTag.FunctionComponent,
+  FiberTag.ForwardRef,
+  FiberTag.SimpleMemoComponent,
+]);
 
 export function categorizeRender(fiber: Fiber): RenderReason {
-  if (!fiber.alternate) {
+  const previous = fiber.alternate;
+  if (!previous) {
     return { type: 'mount' };
-  }
-
-  const alt = fiber.alternate;
-
-  if (fiber.flags & FORCE_UPDATE_FLAG) {
-    return { type: 'force-update' };
   }
 
   const contextProvider = detectContextChange(
     fiber.dependencies?.firstContext ?? null,
-    alt.dependencies?.firstContext ?? null,
+    previous.dependencies?.firstContext ?? null,
   );
   if (contextProvider) {
     return { type: 'context-changed', provider: contextProvider };
   }
 
-  if (fiber.memoizedProps !== alt.memoizedProps) {
-    const changedKeys = diffProps(fiber.memoizedProps, alt.memoizedProps);
-    if (changedKeys.length > 0) {
-      return { type: 'props-changed', keys: changedKeys };
-    }
-    // Props reference changed but values are identical — only a parent rerender
-    // if state also hasn't changed, otherwise state-changed takes priority.
-    if (fiber.memoizedState !== alt.memoizedState) {
-      return { type: 'state-changed' };
-    }
-    return { type: 'parent-rerender' };
+  const props = compareProps(toProps(previous.memoizedProps), toProps(fiber.memoizedProps));
+  if (props.changed.length > 0) {
+    return { type: 'props-changed', keys: props.changed };
   }
 
-  if (fiber.memoizedState !== alt.memoizedState) {
+  if (didStateChange(fiber, previous)) {
     return { type: 'state-changed' };
   }
 
-  return { type: 'parent-rerender' };
+  // A class only re-renders with the same props, state and context when
+  // forceUpdate() bypassed shouldComponentUpdate.
+  if (fiber.tag === FiberTag.ClassComponent && fiber.memoizedProps === previous.memoizedProps) {
+    return { type: 'force-update' };
+  }
+
+  return props.referenceOnly.length > 0
+    ? { type: 'parent-rerender', referenceOnlyKeys: props.referenceOnly }
+    : { type: 'parent-rerender' };
+}
+
+/**
+ * Function components keep their hooks as a linked list in memoizedState,
+ * and React clones every hook on each render, so the list itself is always
+ * new. Only hooks with an update queue (useState, useReducer,
+ * useSyncExternalStore, ...) hold state; effects, refs and memos don't.
+ */
+function didStateChange(fiber: Fiber, previous: Fiber): boolean {
+  if (!HOOK_LIST_TAGS.has(fiber.tag)) {
+    return fiber.memoizedState !== previous.memoizedState;
+  }
+
+  let nextHook = toHook(fiber.memoizedState);
+  let prevHook = toHook(previous.memoizedState);
+  while (nextHook && prevHook) {
+    if (nextHook.queue !== null && !Object.is(nextHook.memoizedState, prevHook.memoizedState)) {
+      return true;
+    }
+    nextHook = nextHook.next;
+    prevHook = prevHook.next;
+  }
+  return false;
+}
+
+function toHook(value: unknown): Hook | null {
+  return isHook(value) ? value : null;
+}
+
+function isHook(value: unknown): value is Hook {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'memoizedState' in value &&
+    'queue' in value &&
+    'next' in value
+  );
+}
+
+function toProps(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

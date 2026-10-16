@@ -5,7 +5,7 @@ describe('RenderTracker', () => {
   let tracker: RenderTracker;
 
   beforeEach(() => {
-    tracker = new RenderTracker({ maxTracked: 5 });
+    tracker = new RenderTracker();
   });
 
   it('returns 1 on first record for a fiber', () => {
@@ -34,21 +34,14 @@ describe('RenderTracker', () => {
     expect(tracker.getStats({})).toBeUndefined();
   });
 
-  it('respects maxTracked cap -- new non-problematic fibers rejected', () => {
-    const fibers = Array.from({ length: 6 }, () => ({}));
-    for (let i = 0; i < 5; i++) {
-      tracker.record(fibers[i]!, false);
-    }
-    expect(tracker.record(fibers[5]!, false)).toBe(0);
-    expect(tracker.getStats(fibers[5]!)).toBeUndefined();
-  });
-
-  it('allows fibers beyond cap if they have unnecessary rerenders', () => {
-    const fibers = Array.from({ length: 6 }, () => ({}));
-    for (let i = 0; i < 5; i++) {
-      tracker.record(fibers[i]!, false);
-    }
-    expect(tracker.record(fibers[5]!, true)).toBe(1);
+  it('keeps one count across the current/alternate fiber pair', () => {
+    const current: { alternate: object | null } = { alternate: null };
+    expect(tracker.record(current, false)).toBe(1);
+    const workInProgress = { alternate: current };
+    current.alternate = workInProgress;
+    expect(tracker.record(workInProgress, false)).toBe(2);
+    expect(tracker.record(current, true)).toBe(3);
+    expect(tracker.getStats(workInProgress)).toEqual({ renderCount: 3, unnecessaryCount: 1 });
   });
 
   it('reset clears all tracking', () => {
@@ -57,11 +50,5 @@ describe('RenderTracker', () => {
     tracker.reset();
     expect(tracker.getStats(fiber)).toBeUndefined();
     expect(tracker.record(fiber, false)).toBe(1);
-  });
-
-  it('uses default maxTracked of 1000 when not specified', () => {
-    const defaultTracker = new RenderTracker();
-    const fiber = {};
-    expect(defaultTracker.record(fiber, false)).toBe(1);
   });
 });

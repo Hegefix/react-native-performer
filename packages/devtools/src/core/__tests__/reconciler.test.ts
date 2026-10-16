@@ -5,6 +5,7 @@ import './support/fakeDevtoolsHook';
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import {
   act,
+  Component,
   createContext,
   createElement as h,
   forwardRef,
@@ -20,8 +21,8 @@ import type { AttachHandle, CommitEvent, RerenderEvent } from '../types';
 
 /**
  * Integration tests against real React 19 fibers. Each scenario asserts the
- * CORRECT behaviour; scenarios that current detection gets wrong are
- * `it.failing` and flip to failing (i.e. must be converted to `it`) once fixed.
+ * CORRECT behaviour. Numbered comments name the root cause each scenario
+ * pinned down before the detection fix (file:line refer to the pre-fix code).
  */
 
 const TEST_RENDERER_DEPRECATION = 'react-test-renderer is deprecated';
@@ -145,7 +146,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
   // tree, including subtrees React bailed out of without cloning. After the
   // full App rerender, Static's children keep a stale alternate with
   // different props, so they are reported as rendered on every later commit.
-  it.failing('does not report a static sibling of an updating component', async () => {
+  it('does not report a static sibling of an updating component', async () => {
     const counter = makeCounter('Counter');
     let rerenderApp: (() => void) | null = null;
     function App(): ReactElement {
@@ -168,7 +169,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
 
   // 2. fiberWalk.ts:61-63: a fiber React never cloned has no alternate, so
   // `!fiber.alternate` reports it as a mount on every commit.
-  it.failing('does not report a never-updating component as mount on later commits', async () => {
+  it('does not report a never-updating component as mount on later commits', async () => {
     const counter = makeCounter('Counter');
     function App(): ReactElement {
       return h('view', null, h(counter.Counter), h(Static));
@@ -185,7 +186,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
 
   // 3. Same root cause as 1: the memo bailout skips MemoLeaf, but its fiber
   // still differs from its stale alternate.
-  it.failing('does not report a memo component that bailed out, nor its subtree', async () => {
+  it('does not report a memo component that bailed out, nor its subtree', async () => {
     function MemoLeaf({ label }: { label: string }): ReactElement {
       return h('view', null, label);
     }
@@ -212,7 +213,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
 
   // 4. categorize.ts:29-31 + propDiff.ts:25: props are compared by reference,
   // so a fresh-but-equal inline object is reported as `props-changed`.
-  it.failing('reports an inline-object prop from a rerendering parent as parent-rerender', async () => {
+  it('reports an inline-object prop from a rerendering parent as parent-rerender', async () => {
     function StyledChild({ style }: { style: { flex: number } }): ReactElement {
       return h('view', { style });
     }
@@ -227,7 +228,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
     const commit = await update(() => bumpParent?.());
 
     const event = rerenderOf(commit, 'StyledChild');
-    expect(event.reason).toEqual({ type: 'parent-rerender' });
+    expect(event.reason).toEqual({ type: 'parent-rerender', referenceOnlyKeys: ['style'] });
     expect(event.isUnnecessary).toBe(true);
   });
 
@@ -235,7 +236,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
   // memoizedState is always a new reference for a component with hooks, even
   // when no hook's state changed. Kept separate from 4 so each root cause
   // flips its own test.
-  it.failing('reports a parent-driven rerender of a component with untouched state as parent-rerender', async () => {
+  it('reports a parent-driven rerender of a component with untouched state as parent-rerender', async () => {
     function HookedChild(): ReactElement {
       const [value] = useState('constant');
       return h('view', null, value);
@@ -273,7 +274,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
   // 6. fiberWalk.ts:61-68 misses this render entirely: a context-only render
   // keeps memoizedProps (cloned from current) and memoizedState (null, since
   // useContext adds no hook), so the reference heuristic sees no change.
-  it.failing('reports a context value change as context-changed with the provider name', async () => {
+  it('reports a context value change as context-changed with the provider name', async () => {
     const ThemeContext = createContext('light');
     ThemeContext.displayName = 'ThemeContext';
     function ThemedLeaf(): ReactElement {
@@ -299,10 +300,29 @@ describe('attachHook against react-test-renderer (React 19)', () => {
     expect(event.isUnnecessary).toBe(false);
   });
 
+  // 6b. React 19 has no forceUpdate fiber flag (bit 20 is Forked); a class
+  // that rendered with unchanged props, state and context can only have been
+  // forced past shouldComponentUpdate.
+  it('reports a class forceUpdate as force-update and a class setState as state-changed', async () => {
+    let instance: Clock | null = null;
+    class Clock extends Component<Record<string, never>, { ticks: number }> {
+      override state = { ticks: 0 };
+      override componentDidMount(): void { instance = this; }
+      override render(): ReactElement { return h('view', null, String(this.state.ticks)); }
+    }
+
+    await mount(h('view', null, h(Clock)));
+    const forced = await update(() => instance?.forceUpdate());
+    expect(rerenderOf(forced, 'Clock').reason).toEqual({ type: 'force-update' });
+
+    const ticked = await update(() => instance?.setState(prev => ({ ticks: prev.ticks + 1 })));
+    expect(rerenderOf(ticked, 'Clock').reason).toEqual({ type: 'state-changed' });
+  });
+
   // 7. fiberWalk.ts:76-77: for memo(forwardRef(X)) the memo fiber's
   // `type.type` is the forwardRef object, which has no name; its `render`
   // holds X one level deeper.
-  it.failing('names memo(forwardRef(X)) as X, not Anonymous', async () => {
+  it('names memo(forwardRef(X)) as X, not Anonymous', async () => {
     const Wrapped = memo(
       forwardRef<unknown, { label: string }>(function X({ label }, ref): ReactElement {
         return h('view', { ref }, label);
@@ -324,7 +344,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
   // 8. renderTracker.ts:19 keys stats by fiber object, but React alternates
   // between two fiber objects per component, so counts split across them.
   // The mount is render #1, so after N updates the count is N + 1.
-  it.failing('counts every render of a component across commits', async () => {
+  it('counts every render of a component across commits', async () => {
     const UPDATES = 4;
     const counter = makeCounter('Counter');
     function App(): ReactElement {
