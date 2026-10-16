@@ -4,6 +4,7 @@ import type { MeasuredRect } from './types';
 type MeasureCallback = (x: number, y: number, width: number, height: number) => void;
 type MeasureInWindow = (callback: MeasureCallback) => void;
 type HostFiber = Fiber & { stateNode?: unknown };
+type FabricUIManager = { measureInWindow: (node: unknown, callback: MeasureCallback) => void };
 
 const HOST_TAGS: ReadonlySet<number> = new Set([
   FiberTag.HostComponent,
@@ -44,11 +45,10 @@ export function resolveMeasureInWindow(stateNode: unknown): MeasureInWindow | nu
       return callback => publicInstance.measureInWindow(callback);
     }
     // Newer renderers create the public instance lazily; the UI manager measures the shadow node directly.
-    const uiManager = globalThis.nativeFabricUIManager;
-    const measureNode = uiManager?.measureInWindow;
+    const uiManager = readFabricUIManager();
     const shadowNode = stateNode.node;
-    if (typeof measureNode === 'function' && shadowNode !== undefined) {
-      return callback => measureNode.call(uiManager, shadowNode, callback);
+    if (uiManager && shadowNode !== undefined) {
+      return callback => uiManager.measureInWindow(shadowNode, callback);
     }
     return null;
   }
@@ -82,6 +82,20 @@ export function measureFiber(fiber: Fiber): Promise<MeasuredRect | null> {
       resolve(null);
     }
   });
+}
+
+/**
+ * `nativeFabricUIManager` is a JSI global that no RN typings declare, so it is read off
+ * globalThis untyped: a global declaration here would not reach consumers type-checking the source.
+ */
+function readFabricUIManager(): FabricUIManager | null {
+  const uiManager: unknown = Reflect.get(globalThis, 'nativeFabricUIManager');
+  if (!isRecord(uiManager)) return null;
+  const measureNode = uiManager.measureInWindow;
+  if (typeof measureNode !== 'function') return null;
+  return {
+    measureInWindow: (node, callback) => { Reflect.apply(measureNode, uiManager, [node, callback]); },
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

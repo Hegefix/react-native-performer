@@ -30,7 +30,7 @@ function measurable(rect: [number, number, number, number]) {
 }
 
 afterEach(() => {
-  globalThis.nativeFabricUIManager = undefined;
+  Reflect.deleteProperty(globalThis, 'nativeFabricUIManager');
   jest.useRealTimers();
 });
 
@@ -68,7 +68,7 @@ describe('measureFiber', () => {
   it('Fabric without a public instance yet: measures the shadow node via the UI manager', async () => {
     const shadowNode = {};
     const uiMeasure = jest.fn((_node: unknown, callback: MeasureCallback) => callback(1, 2, 3, 4));
-    globalThis.nativeFabricUIManager = { measureInWindow: uiMeasure };
+    Reflect.set(globalThis, 'nativeFabricUIManager', { measureInWindow: uiMeasure });
     const host = fiber(FiberTag.HostComponent, [], { node: shadowNode, canonical: { publicInstance: null } });
 
     await expect(measureFiber(host)).resolves.toEqual({ x: 1, y: 2, width: 3, height: 4 });
