@@ -100,16 +100,51 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getFiberName(fiber: any): string {
-  const type = fiber.type;
-  if (!type) return 'Unknown';
-  if (typeof type === 'string') return type;
-  // forwardRef / memo wrap the component in { $$typeof, render | type }
-  if (typeof type === 'object') {
-    const inner = type.render ?? type.type;
-    if (inner) return inner.displayName ?? inner.name ?? 'Anonymous';
-    return type.displayName ?? 'Anonymous';
-  }
-  return type.displayName ?? type.name ?? 'Anonymous';
+const REACT_MEMO_TYPE = Symbol.for('react.memo');
+const REACT_FORWARD_REF_TYPE = Symbol.for('react.forward_ref');
+const REACT_LAZY_TYPE = Symbol.for('react.lazy');
+const MAX_WRAPPER_DEPTH = 8;
+
+export function getFiberName(fiber: Fiber): string {
+  if (fiber.tag === FiberTag.ContextProvider) return `${getContextName(fiber.type)}.Provider`;
+  if (fiber.tag === FiberTag.ContextConsumer) return `${getContextName(fiber.type)}.Consumer`;
+  return getTypeName(fiber.type);
 }
+
+/** Unwraps memo / forwardRef (in any nesting) down to the component, unless a wrapper has its own displayName. */
+function getTypeName(type: unknown): string {
+  let current = type;
+  for (let depth = 0; depth < MAX_WRAPPER_DEPTH; depth++) {
+    if (typeof current === 'string') return current;
+    if (typeof current === 'function') return readDisplayName(current) ?? (current.name || 'Anonymous');
+    if (!isRecord(current)) return 'Unknown';
+
+    const displayName = readDisplayName(current);
+    if (displayName) return displayName;
+
+    const kind = current.$$typeof;
+    if (kind === REACT_MEMO_TYPE) current = current.type;
+    else if (kind === REACT_FORWARD_REF_TYPE) current = current.render;
+    else if (kind === REACT_LAZY_TYPE) return 'Lazy';
+    else return 'Anonymous';
+  }
+  return 'Anonymous';
+}
+
+/**
+ * React 19: a Provider fiber's type is the context, a Consumer's is
+ * `{ _context }`. React 18 is the other way round. Either way the context is
+ * `type._context` if present, else `type`.
+ */
+function getContextName(type: unknown): string {
+  if (!isRecord(type)) return 'Context';
+  const context = isRecord(type._context) ? type._context : type;
+  return readDisplayName(context) ?? 'Context';
+}
+
+function readDisplayName(value: object): string | undefined {
+  if (!('displayName' in value)) return undefined;
+  const { displayName } = value;
+  return typeof displayName === 'string' && displayName !== '' ? displayName : undefined;
+}
+
