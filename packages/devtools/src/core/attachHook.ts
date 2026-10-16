@@ -95,8 +95,8 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
           isUnnecessary,
         };
 
-        if (shouldInclude(rerenderEvent, activeFilter)) {
-          emitRerender(rerenderEvent);
+        if (shouldInclude(rerenderEvent, activeFilter, fiberInfo.fiber)) {
+          emitRerender(rerenderEvent, fiberInfo.fiber);
         }
       }
     } catch (err) {

@@ -1,4 +1,6 @@
 import type { FilterConfig, RerenderEvent } from '../core/types';
+import type { Fiber } from '../core/fiber';
+import { isOwnFiber } from './ownFibers';
 
 const HOST_COMPONENT_TAG = 5;
 
@@ -18,7 +20,13 @@ export const DEFAULT_FILTER: FilterConfig = {
 export function shouldInclude(
   event: RerenderEvent,
   filter: FilterConfig,
+  fiber?: Fiber,
 ): boolean {
+  // Overlay and HUD commit on every flash; reporting them would feed the overlay its own renders.
+  if (fiber !== undefined && isOwnFiber(fiber)) {
+    return false;
+  }
+
   const { component } = event;
 
   if (filter.ignoreComponents?.includes(component.name)) {
