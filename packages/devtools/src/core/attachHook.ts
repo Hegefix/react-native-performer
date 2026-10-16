@@ -1,6 +1,7 @@
 import type { AttachHandle, AttachOptions, CommitEvent, FilterConfig } from './types';
 import { emitCommit, emitRerender } from './eventBus';
 import { walkFiberTree } from './fiberWalk';
+import type { FiberRoot } from './fiber';
 import { categorizeRender } from '../analysis/categorize';
 import { RenderTracker } from '../analysis/renderTracker';
 import { shouldInclude, DEFAULT_FILTER } from '../analysis/filter';
@@ -8,10 +9,15 @@ import { shouldInclude, DEFAULT_FILTER } from '../analysis/filter';
 const PATCH_MARKER = '__performerDevtoolsPatched__';
 const MAX_RENDERED_SAMPLE = 500;
 
+type CommitFiberRootHandler = (
+  rendererID: number,
+  root: FiberRoot,
+  priorityLevel: unknown,
+  didError: boolean,
+) => void;
+
 type DevToolsHook = {
-  onCommitFiberRoot?:
-    | ((rendererID: number, root: any, priorityLevel: unknown, didError: boolean) => void)
-    | undefined;
+  onCommitFiberRoot?: CommitFiberRootHandler | undefined;
   renderers?: Map<number, unknown> | undefined;
   [key: string]: unknown;
 };
@@ -27,9 +33,7 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
     return { attached: false, detach: noop };
   }
 
-  const hook = (globalThis as any).__REACT_DEVTOOLS_GLOBAL_HOOK__ as
-    | DevToolsHook
-    | undefined;
+  const hook = readDevToolsHook();
 
   if (!hook) {
     if (__DEV__) {
@@ -63,10 +67,7 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
 
       const commitEvent: CommitEvent = {
         commitId: commitCount,
-        timestamp:
-          typeof performance !== 'undefined' && typeof performance.now === 'function'
-            ? performance.now()
-            : Date.now(),
+        timestamp: readTimestamp(),
         rendererId,
         totalFibers: walk.total,
         renderedFibers: walk.rendered
@@ -86,7 +87,7 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
           timestamp: commitEvent.timestamp,
           component: {
             name: fiberInfo.name,
-            fiberTag: fiberInfo.fiber.tag ?? 0,
+            fiberTag: fiberInfo.fiber.tag,
             depth: fiberInfo.depth,
           },
           reason,
@@ -129,3 +130,28 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
 }
 
 function noop(): void {}
+
+function readDevToolsHook(): DevToolsHook | undefined {
+  const candidate: unknown = Reflect.get(globalThis, '__REACT_DEVTOOLS_GLOBAL_HOOK__');
+  return isDevToolsHook(candidate) ? candidate : undefined;
+}
+
+// The hook is installed by React DevTools / RN before React loads; beyond
+// being an object its shape is React's contract, and every method we call on
+// it is checked with typeof at the call site.
+function isDevToolsHook(value: unknown): value is DevToolsHook {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * `performance` is only typed under the DOM lib, which RN consumers don't
+ * load, so it is read off globalThis untyped. Hermes and JSC both provide it.
+ */
+function readTimestamp(): number {
+  const clock: unknown = Reflect.get(globalThis, 'performance');
+  if (typeof clock === 'object' && clock !== null && 'now' in clock && typeof clock.now === 'function') {
+    const timestamp: unknown = Reflect.apply(clock.now, clock, []);
+    if (typeof timestamp === 'number') return timestamp;
+  }
+  return Date.now();
+}
