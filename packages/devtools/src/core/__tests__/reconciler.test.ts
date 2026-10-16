@@ -145,7 +145,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
   // tree, including subtrees React bailed out of without cloning. After the
   // full App rerender, Static's children keep a stale alternate with
   // different props, so they are reported as rendered on every later commit.
-  it.failing('does not report a static sibling of an updating component', async () => {
+  it('does not report a static sibling of an updating component', async () => {
     const counter = makeCounter('Counter');
     let rerenderApp: (() => void) | null = null;
     function App(): ReactElement {
@@ -168,7 +168,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
 
   // 2. fiberWalk.ts:61-63: a fiber React never cloned has no alternate, so
   // `!fiber.alternate` reports it as a mount on every commit.
-  it.failing('does not report a never-updating component as mount on later commits', async () => {
+  it('does not report a never-updating component as mount on later commits', async () => {
     const counter = makeCounter('Counter');
     function App(): ReactElement {
       return h('view', null, h(counter.Counter), h(Static));
@@ -185,7 +185,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
 
   // 3. Same root cause as 1: the memo bailout skips MemoLeaf, but its fiber
   // still differs from its stale alternate.
-  it.failing('does not report a memo component that bailed out, nor its subtree', async () => {
+  it('does not report a memo component that bailed out, nor its subtree', async () => {
     function MemoLeaf({ label }: { label: string }): ReactElement {
       return h('view', null, label);
     }
@@ -273,7 +273,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
   // 6. fiberWalk.ts:61-68 misses this render entirely: a context-only render
   // keeps memoizedProps (cloned from current) and memoizedState (null, since
   // useContext adds no hook), so the reference heuristic sees no change.
-  it.failing('reports a context value change as context-changed with the provider name', async () => {
+  it('reports a context value change as context-changed with the provider name', async () => {
     const ThemeContext = createContext('light');
     ThemeContext.displayName = 'ThemeContext';
     function ThemedLeaf(): ReactElement {
@@ -302,7 +302,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
   // 7. fiberWalk.ts:76-77: for memo(forwardRef(X)) the memo fiber's
   // `type.type` is the forwardRef object, which has no name; its `render`
   // holds X one level deeper.
-  it.failing('names memo(forwardRef(X)) as X, not Anonymous', async () => {
+  it('names memo(forwardRef(X)) as X, not Anonymous', async () => {
     const Wrapped = memo(
       forwardRef<unknown, { label: string }>(function X({ label }, ref): ReactElement {
         return h('view', { ref }, label);

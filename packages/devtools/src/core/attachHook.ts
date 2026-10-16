@@ -60,10 +60,7 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
     commitCount++;
 
     try {
-      const walk = walkFiberTree(root.current, {
-        skipHostComponents,
-        maxRenderedSample: MAX_RENDERED_SAMPLE,
-      });
+      const walk = walkFiberTree(root.current, { skipHostComponents });
 
       const commitEvent: CommitEvent = {
         commitId: commitCount,
@@ -73,9 +70,9 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
             : Date.now(),
         rendererId,
         totalFibers: walk.total,
-        renderedFibers: walk.rendered.map(({ name, isMount, propsKeys }) => ({
-          name, isMount, propsKeys,
-        })),
+        renderedFibers: walk.rendered
+          .slice(0, MAX_RENDERED_SAMPLE)
+          .map(({ name, isMount, propsKeys }) => ({ name, isMount, propsKeys })),
       };
 
       emitCommit(commitEvent);
