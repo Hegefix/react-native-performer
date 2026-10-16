@@ -21,8 +21,8 @@ import type { AttachHandle, CommitEvent, RerenderEvent } from '../types';
 
 /**
  * Integration tests against real React 19 fibers. Each scenario asserts the
- * CORRECT behaviour; scenarios that current detection gets wrong are
- * `it.failing` and flip to failing (i.e. must be converted to `it`) once fixed.
+ * CORRECT behaviour. Numbered comments name the root cause each scenario
+ * pinned down before the detection fix (file:line refer to the pre-fix code).
  */
 
 const TEST_RENDERER_DEPRECATION = 'react-test-renderer is deprecated';
