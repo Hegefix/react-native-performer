@@ -3,47 +3,39 @@ type FiberStats = {
   unnecessaryCount: number;
 };
 
-type TrackerOptions = {
-  maxTracked?: number;
+/** The two fiber objects React alternates between for one component instance. */
+type TrackedFiber = {
+  alternate?: object | null;
 };
 
+/**
+ * Per-component render counts. React swaps a component between two fiber
+ * objects (current and alternate) on every update, so the entry is stored
+ * under both: whichever one the next commit hands us finds it. WeakMap keys
+ * free the entry when React drops the fibers, so no size cap is needed.
+ */
 export class RenderTracker {
   private stats = new WeakMap<object, FiberStats>();
-  private trackedCount = 0;
-  private readonly maxTracked: number;
 
-  constructor(options: TrackerOptions = {}) {
-    this.maxTracked = options.maxTracked ?? 1000;
-  }
+  record(fiber: TrackedFiber, isUnnecessary: boolean): number {
+    const alternate = fiber.alternate ?? null;
+    const entry = this.stats.get(fiber) ??
+      (alternate ? this.stats.get(alternate) : undefined) ?? { renderCount: 0, unnecessaryCount: 0 };
 
-  record(fiber: object, isUnnecessary: boolean): number {
-    const existing = this.stats.get(fiber);
+    entry.renderCount++;
+    if (isUnnecessary) entry.unnecessaryCount++;
 
-    if (existing) {
-      existing.renderCount++;
-      if (isUnnecessary) existing.unnecessaryCount++;
-      return existing.renderCount;
-    }
-
-    if (this.trackedCount >= this.maxTracked && !isUnnecessary) {
-      return 0;
-    }
-
-    const entry: FiberStats = {
-      renderCount: 1,
-      unnecessaryCount: isUnnecessary ? 1 : 0,
-    };
     this.stats.set(fiber, entry);
-    this.trackedCount++;
-    return 1;
+    if (alternate) this.stats.set(alternate, entry);
+    return entry.renderCount;
   }
 
-  getStats(fiber: object): FiberStats | undefined {
-    return this.stats.get(fiber);
+  getStats(fiber: TrackedFiber): FiberStats | undefined {
+    const alternate = fiber.alternate ?? null;
+    return this.stats.get(fiber) ?? (alternate ? this.stats.get(alternate) : undefined);
   }
 
   reset(): void {
-    this.trackedCount = 0;
     this.stats = new WeakMap();
   }
 }

@@ -344,7 +344,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
   // 8. renderTracker.ts:19 keys stats by fiber object, but React alternates
   // between two fiber objects per component, so counts split across them.
   // The mount is render #1, so after N updates the count is N + 1.
-  it.failing('counts every render of a component across commits', async () => {
+  it('counts every render of a component across commits', async () => {
     const UPDATES = 4;
     const counter = makeCounter('Counter');
     function App(): ReactElement {

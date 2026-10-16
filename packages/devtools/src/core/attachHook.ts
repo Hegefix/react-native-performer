@@ -17,7 +17,6 @@ type DevToolsHook = {
 };
 
 let activeFilter: FilterConfig = { ...DEFAULT_FILTER };
-let activeTracker: RenderTracker | null = null;
 
 export function setFilter(filter: FilterConfig): void {
   activeFilter = { ...DEFAULT_FILTER, ...filter };
@@ -54,7 +53,7 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
   const originalOnCommit = hook.onCommitFiberRoot;
   let commitCount = 0;
   const skipHostComponents = options.skipHostComponents ?? false;
-  activeTracker = new RenderTracker();
+  const tracker = new RenderTracker();
 
   hook.onCommitFiberRoot = (rendererId, root, priorityLevel, didError) => {
     commitCount++;
@@ -80,9 +79,7 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
       for (const fiberInfo of walk.rendered) {
         const reason = categorizeRender(fiberInfo.fiber);
         const isUnnecessary = reason.type === 'parent-rerender';
-        const renderCount = activeTracker!.record(fiberInfo.fiber, isUnnecessary);
-
-        if (renderCount === 0) continue;
+        const renderCount = tracker.record(fiberInfo.fiber, isUnnecessary);
 
         const rerenderEvent = {
           commitId: commitCount,
@@ -126,7 +123,6 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
     if (!hook[PATCH_MARKER]) return;
     hook.onCommitFiberRoot = originalOnCommit;
     delete hook[PATCH_MARKER];
-    activeTracker = null;
   };
 
   return { attached: true, detach };
