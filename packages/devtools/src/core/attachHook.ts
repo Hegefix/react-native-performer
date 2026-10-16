@@ -5,6 +5,7 @@ import type { FiberRoot } from './fiber';
 import { categorizeRender } from '../analysis/categorize';
 import { RenderTracker } from '../analysis/renderTracker';
 import { shouldInclude, DEFAULT_FILTER } from '../analysis/filter';
+import { isOwnFiber } from '../analysis/ownFibers';
 
 const PATCH_MARKER = '__performerDevtoolsPatched__';
 const MAX_RENDERED_SAMPLE = 500;
@@ -59,46 +60,55 @@ export function attachHook(options: AttachOptions = {}): AttachHandle {
   const skipHostComponents = options.skipHostComponents ?? false;
   const tracker = new RenderTracker();
 
-  hook.onCommitFiberRoot = (rendererId, root, priorityLevel, didError) => {
+  const reportCommit = (rendererId: number, root: FiberRoot): void => {
+    const walk = walkFiberTree(root.current, { skipHostComponents });
+    const appRendered = walk.rendered.filter(fiberInfo => !isOwnFiber(fiberInfo.fiber));
+
+    // Nothing of the app rendered: either only the overlay/HUD did (a flash, a HUD refresh), or a
+    // bailed-out update inside them committed with no work. Neither is an app commit. The walk can't
+    // tell an app no-op from an overlay no-op, so empty commits are skipped either way.
+    if (appRendered.length === 0) return;
+
     commitCount++;
+    const commitEvent: CommitEvent = {
+      commitId: commitCount,
+      timestamp: readTimestamp(),
+      rendererId,
+      totalFibers: walk.total,
+      renderedFibers: appRendered
+        .slice(0, MAX_RENDERED_SAMPLE)
+        .map(({ name, isMount, propsKeys }) => ({ name, isMount, propsKeys })),
+    };
 
-    try {
-      const walk = walkFiberTree(root.current, { skipHostComponents });
+    emitCommit(commitEvent);
 
-      const commitEvent: CommitEvent = {
+    for (const fiberInfo of appRendered) {
+      const reason = categorizeRender(fiberInfo.fiber);
+      const isUnnecessary = reason.type === 'parent-rerender';
+      const renderCount = tracker.record(fiberInfo.fiber, isUnnecessary);
+
+      const rerenderEvent = {
         commitId: commitCount,
-        timestamp: readTimestamp(),
-        rendererId,
-        totalFibers: walk.total,
-        renderedFibers: walk.rendered
-          .slice(0, MAX_RENDERED_SAMPLE)
-          .map(({ name, isMount, propsKeys }) => ({ name, isMount, propsKeys })),
+        timestamp: commitEvent.timestamp,
+        component: {
+          name: fiberInfo.name,
+          fiberTag: fiberInfo.fiber.tag,
+          depth: fiberInfo.depth,
+        },
+        reason,
+        renderCount,
+        isUnnecessary,
       };
 
-      emitCommit(commitEvent);
-
-      for (const fiberInfo of walk.rendered) {
-        const reason = categorizeRender(fiberInfo.fiber);
-        const isUnnecessary = reason.type === 'parent-rerender';
-        const renderCount = tracker.record(fiberInfo.fiber, isUnnecessary);
-
-        const rerenderEvent = {
-          commitId: commitCount,
-          timestamp: commitEvent.timestamp,
-          component: {
-            name: fiberInfo.name,
-            fiberTag: fiberInfo.fiber.tag,
-            depth: fiberInfo.depth,
-          },
-          reason,
-          renderCount,
-          isUnnecessary,
-        };
-
-        if (shouldInclude(rerenderEvent, activeFilter)) {
-          emitRerender(rerenderEvent);
-        }
+      if (shouldInclude(rerenderEvent, activeFilter, fiberInfo.fiber)) {
+        emitRerender(rerenderEvent, fiberInfo.fiber);
       }
+    }
+  };
+
+  hook.onCommitFiberRoot = (rendererId, root, priorityLevel, didError) => {
+    try {
+      reportCommit(rendererId, root);
     } catch (err) {
       if (__DEV__) {
         // eslint-disable-next-line no-console

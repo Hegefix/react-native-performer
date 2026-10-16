@@ -1,89 +1,113 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { FlashRect } from './FlashRect';
-import { onRerender } from '../core/eventBus';
-import type { FlashData } from './types';
+import { measureFiber } from './measure';
+import { onRerenderWithFiber } from '../core/eventBus';
+import type { Fiber } from '../core/fiber';
+import type { FlashData, MeasuredRect } from './types';
 import type { OverlayOptions, RerenderEvent } from '../core/types';
 
 type OverlayContainerProps = {
   options: Required<OverlayOptions>;
 };
 
+type PendingRender = {
+  event: RerenderEvent;
+  fiber: Fiber;
+};
+
+/** Minimum gap between flushes, so a hot render loop costs at most ~10 measure batches a second. */
+export const FLUSH_INTERVAL_MS = 100;
+export const MAX_FLASHES_PER_FLUSH = 40;
+export const MAX_ACTIVE_FLASHES = 120;
+
 let idCounter = 0;
 
 export function OverlayContainer({ options }: OverlayContainerProps) {
   const [flashes, setFlashes] = useState<FlashData[]>([]);
-  const pendingRef = useRef<Map<number, RerenderEvent[]>>(new Map());
-  const rafRef = useRef<number | null>(null);
+  const containerRef = useRef<React.ComponentRef<typeof View>>(null);
+  // measureInWindow is window-relative; the overlay is not guaranteed to start at the window origin.
+  const originRef = useRef({ x: 0, y: 0 });
 
-  const processCommitBatch = useCallback((events: RerenderEvent[]) => {
-    const flashBatch: FlashData[] = [];
-
-    for (const event of events) {
-      if (options.showUnnecessaryOnly && !event.isUnnecessary) continue;
-
-      const severityThreshold =
-        options.minSeverity === 'critical' ? 6 :
-        options.minSeverity === 'warning' ? 3 : 1;
-
-      if (event.renderCount < severityThreshold) continue;
-
-      const flash: FlashData = {
-        id: `flash-${++idCounter}`,
-        rect: { x: 0, y: 0, width: 0, height: 0 },
-        renderCount: event.renderCount,
-        isUnnecessary: event.isUnnecessary,
-        componentName: event.component.name,
-        reason: event.reason.type,
-      };
-      flashBatch.push(flash);
-    }
-
-    if (flashBatch.length > 0) {
-      setFlashes(prev => [...prev, ...flashBatch]);
-    }
-  }, [options.showUnnecessaryOnly, options.minSeverity]);
+  const { enabled, showUnnecessaryOnly, minSeverity } = options;
 
   useEffect(() => {
-    if (!options.enabled) return;
+    if (!enabled) return;
 
-    const unsubscribe = onRerender((event) => {
-      const commitId = event.commitId;
-      const pending = pendingRef.current;
+    let disposed = false;
+    // Keyed by fiber so a component rendering several times between flushes flashes once, with its latest count.
+    const pending = new Map<Fiber, PendingRender>();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let frame: number | null = null;
+    let lastFlushAt = 0;
 
-      if (!pending.has(commitId)) {
-        pending.set(commitId, []);
+    const severityThreshold =
+      minSeverity === 'critical' ? 6 :
+      minSeverity === 'warning' ? 3 : 1;
 
-        if (rafRef.current !== null) {
-          cancelAnimationFrame(rafRef.current);
-        }
-        rafRef.current = requestAnimationFrame(() => {
-          const batch = pending.get(commitId);
-          pending.delete(commitId);
-          rafRef.current = null;
-          if (batch) processCommitBatch(batch);
-        });
-      }
+    const flush = (): void => {
+      frame = null;
+      lastFlushAt = Date.now();
+      const batch = Array.from(pending.values());
+      pending.clear();
 
-      pending.get(commitId)!.push(event);
+      void Promise.all(
+        batch.map(async ({ event, fiber }) =>
+          toFlash(event, await measureFiber(fiber), originRef.current),
+        ),
+      ).then(results => {
+        if (disposed) return;
+        const ready = results.filter((flash): flash is FlashData => flash !== null);
+        if (ready.length === 0) return;
+        setFlashes(prev => [...prev, ...ready].slice(-MAX_ACTIVE_FLASHES));
+      });
+    };
+
+    const scheduleFlush = (): void => {
+      if (timer !== null || frame !== null) return;
+      const wait = Math.max(0, lastFlushAt + FLUSH_INTERVAL_MS - Date.now());
+      timer = setTimeout(() => {
+        timer = null;
+        // Measure on the next frame, after the native side has mounted the commit.
+        frame = requestAnimationFrame(flush);
+      }, wait);
+    };
+
+    const unsubscribe = onRerenderWithFiber((event, fiber) => {
+      if (showUnnecessaryOnly && !event.isUnnecessary) return;
+      if (event.renderCount < severityThreshold) return;
+
+      const key = fiber.alternate !== null && pending.has(fiber.alternate) ? fiber.alternate : fiber;
+      if (!pending.has(key) && pending.size >= MAX_FLASHES_PER_FLUSH) return;
+
+      pending.set(key, { event, fiber });
+      scheduleFlush();
     });
 
     return () => {
+      disposed = true;
       unsubscribe();
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
-      }
+      if (timer !== null) clearTimeout(timer);
+      if (frame !== null) cancelAnimationFrame(frame);
+      pending.clear();
+      setFlashes(prev => (prev.length === 0 ? prev : []));
     };
-  }, [options.enabled, processCommitBatch]);
+  }, [enabled, showUnnecessaryOnly, minSeverity]);
 
   const handleFlashComplete = useCallback((id: string) => {
     setFlashes(prev => prev.filter(f => f.id !== id));
   }, []);
 
-  if (!options.enabled) return null;
+  const handleLayout = useCallback(() => {
+    containerRef.current?.measureInWindow((x, y) => {
+      originRef.current = { x, y };
+    });
+  }, []);
+
+  if (!enabled) return null;
 
   return (
-    <View style={styles.container} pointerEvents="none">
+    <View ref={containerRef} style={styles.container} pointerEvents="none" onLayout={handleLayout}>
       {flashes.map(flash => (
         <FlashRect
           key={flash.id}
@@ -97,9 +121,30 @@ export function OverlayContainer({ options }: OverlayContainerProps) {
   );
 }
 
+function toFlash(
+  event: RerenderEvent,
+  rect: MeasuredRect | null,
+  origin: { x: number; y: number },
+): FlashData | null {
+  if (!rect) return null;
+  return {
+    id: `flash-${++idCounter}`,
+    rect: { ...rect, x: rect.x - origin.x, y: rect.y - origin.y },
+    renderCount: event.renderCount,
+    isUnnecessary: event.isUnnecessary,
+    componentName: event.component.name,
+    reason: event.reason.type,
+  };
+}
+
 const styles = StyleSheet.create({
+  // Spelled out: RN 0.88 removed absoluteFillObject at runtime, and the spread silently yields nothing.
   container: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     zIndex: 999999,
   },
 });
