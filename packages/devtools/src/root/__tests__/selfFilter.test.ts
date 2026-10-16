@@ -1,6 +1,6 @@
 // Must stay the first import: the renderer binds to the devtools hook when its
 // module is evaluated, so the hook has to exist before react-test-renderer loads.
-import '../../core/__tests__/support/fakeDevtoolsHook';
+import { fakeHook } from '../../core/__tests__/support/fakeDevtoolsHook';
 
 import { describe, it, expect, beforeAll, beforeEach, afterEach, jest } from '@jest/globals';
 import { act, createElement as h, useState } from 'react';
@@ -37,6 +37,7 @@ let renderer: ReactTestRenderer | null;
 let commits: CommitEvent[];
 let rerenders: RerenderEvent[];
 let unexpectedConsole: string[];
+let reactCommits: number;
 let bumpCounter: () => void = () => {};
 
 function Counter() {
@@ -71,6 +72,9 @@ beforeEach(async () => {
   jest.spyOn(console, 'error').mockImplementation(captureConsole);
   jest.spyOn(console, 'warn').mockImplementation(captureConsole);
 
+  // Counts every commit React makes, including the ones attachHook skips; attachHook must still forward them.
+  reactCommits = 0;
+  fakeHook.onCommitFiberRoot = () => { reactCommits++; };
   handle = attachHook();
   onCommit(event => { commits.push(event); });
   onRerender(event => { rerenders.push(event); });
@@ -90,37 +94,56 @@ afterEach(async () => {
   expect(unexpectedConsole).toEqual([]);
 });
 
+function reportedNames(): string[] {
+  return [
+    ...commits.flatMap(commit => commit.renderedFibers.map(fiber => fiber.name)),
+    ...rerenders.map(event => event.component.name),
+  ];
+}
+
 describe('self-filtering', () => {
   it('reports the app on mount, not the overlay or HUD', () => {
-    const names = rerenders.map(event => event.component.name);
-    expect(names).toContain('Counter');
-    expect(names.filter(name => LIBRARY_COMPONENTS.includes(name))).toEqual([]);
+    expect(reportedNames()).toContain('Counter');
+    expect(reportedNames().filter(name => LIBRARY_COMPONENTS.includes(name))).toEqual([]);
   });
 
-  it('flash and HUD commits after an app render emit nothing', async () => {
+  it('flash and HUD commits after an app render are not reported at all', async () => {
+    commits = [];
     rerenders = [];
-    const before = commits.length;
+    const reactCommitsBefore = reactCommits;
 
     await act(async () => { bumpCounter(); });
     await wait(FLUSH_INTERVAL_MS + 50);
     expect(flashCount()).toBe(1);
     await wait(HUD_UPDATE_INTERVAL_MS);
 
-    // App commit, flash commit, HUD refresh commit.
-    expect(commits.length).toBeGreaterThanOrEqual(before + 3);
+    // React committed the app render, the flash and the HUD refresh; only the first is the app's.
+    expect(reactCommits - reactCommitsBefore).toBeGreaterThanOrEqual(3);
+    expect(commits).toHaveLength(1);
+    expect(reportedNames().filter(name => LIBRARY_COMPONENTS.includes(name))).toEqual([]);
     expect(rerenders.map(event => event.component.name)).toEqual(['Counter']);
   });
 
-  it('toggling the overlay and HUD commits but emits nothing', async () => {
+  it('toggling the overlay and HUD emits no commit and no rerender', async () => {
+    commits = [];
     rerenders = [];
-    const before = commits.length;
+    const reactCommitsBefore = reactCommits;
 
     await act(async () => { hideHUD(); });
     await act(async () => { showHUD(); });
     await act(async () => { disableOverlay(); });
     await act(async () => { enableOverlay(); });
 
-    expect(commits.length).toBeGreaterThanOrEqual(before + 4);
+    expect(reactCommits - reactCommitsBefore).toBeGreaterThanOrEqual(4);
+    expect(commits).toEqual([]);
     expect(rerenders).toEqual([]);
+  });
+
+  it('keeps commit ids contiguous across skipped commits', async () => {
+    const lastId = commits[commits.length - 1]?.commitId ?? 0;
+    await act(async () => { hideHUD(); });
+    await act(async () => { bumpCounter(); });
+
+    expect(commits[commits.length - 1]?.commitId).toBe(lastId + 1);
   });
 });
