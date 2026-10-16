@@ -5,6 +5,7 @@ import './support/fakeDevtoolsHook';
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import {
   act,
+  Component,
   createContext,
   createElement as h,
   forwardRef,
@@ -212,7 +213,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
 
   // 4. categorize.ts:29-31 + propDiff.ts:25: props are compared by reference,
   // so a fresh-but-equal inline object is reported as `props-changed`.
-  it.failing('reports an inline-object prop from a rerendering parent as parent-rerender', async () => {
+  it('reports an inline-object prop from a rerendering parent as parent-rerender', async () => {
     function StyledChild({ style }: { style: { flex: number } }): ReactElement {
       return h('view', { style });
     }
@@ -227,7 +228,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
     const commit = await update(() => bumpParent?.());
 
     const event = rerenderOf(commit, 'StyledChild');
-    expect(event.reason).toEqual({ type: 'parent-rerender' });
+    expect(event.reason).toEqual({ type: 'parent-rerender', referenceOnlyKeys: ['style'] });
     expect(event.isUnnecessary).toBe(true);
   });
 
@@ -235,7 +236,7 @@ describe('attachHook against react-test-renderer (React 19)', () => {
   // memoizedState is always a new reference for a component with hooks, even
   // when no hook's state changed. Kept separate from 4 so each root cause
   // flips its own test.
-  it.failing('reports a parent-driven rerender of a component with untouched state as parent-rerender', async () => {
+  it('reports a parent-driven rerender of a component with untouched state as parent-rerender', async () => {
     function HookedChild(): ReactElement {
       const [value] = useState('constant');
       return h('view', null, value);
@@ -297,6 +298,25 @@ describe('attachHook against react-test-renderer (React 19)', () => {
     const event = rerenderOf(commit, 'ThemedLeaf');
     expect(event.reason).toEqual({ type: 'context-changed', provider: 'ThemeContext' });
     expect(event.isUnnecessary).toBe(false);
+  });
+
+  // 6b. React 19 has no forceUpdate fiber flag (bit 20 is Forked); a class
+  // that rendered with unchanged props, state and context can only have been
+  // forced past shouldComponentUpdate.
+  it('reports a class forceUpdate as force-update and a class setState as state-changed', async () => {
+    let instance: Clock | null = null;
+    class Clock extends Component<Record<string, never>, { ticks: number }> {
+      override state = { ticks: 0 };
+      override componentDidMount(): void { instance = this; }
+      override render(): ReactElement { return h('view', null, String(this.state.ticks)); }
+    }
+
+    await mount(h('view', null, h(Clock)));
+    const forced = await update(() => instance?.forceUpdate());
+    expect(rerenderOf(forced, 'Clock').reason).toEqual({ type: 'force-update' });
+
+    const ticked = await update(() => instance?.setState(prev => ({ ticks: prev.ticks + 1 })));
+    expect(rerenderOf(ticked, 'Clock').reason).toEqual({ type: 'state-changed' });
   });
 
   // 7. fiberWalk.ts:76-77: for memo(forwardRef(X)) the memo fiber's

@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { diffProps } from '../propDiff';
+import { compareProps, diffProps } from '../propDiff';
 
 describe('diffProps', () => {
   it('returns empty array when props are identical references', () => {
@@ -37,11 +37,21 @@ describe('diffProps', () => {
     expect(diffProps(prev, next)).toEqual(['onPress']);
   });
 
-  it('detects inline object reference changes', () => {
-    const style = { flex: 1 };
-    const prev = { style };
+  it('treats a shallow-equal inline object as unchanged', () => {
+    const prev = { style: { flex: 1 } };
     const next = { style: { flex: 1 } };
+    expect(diffProps(prev, next)).toEqual([]);
+  });
+
+  it('detects inline objects whose entries differ', () => {
+    const prev = { style: { flex: 1 } };
+    const next = { style: { flex: 2 } };
     expect(diffProps(prev, next)).toEqual(['style']);
+  });
+
+  it('treats a shallow-equal inline array as unchanged', () => {
+    expect(diffProps({ ids: [1, 2] }, { ids: [1, 2] })).toEqual([]);
+    expect(diffProps({ ids: [1, 2] }, { ids: [1, 3] })).toEqual(['ids']);
   });
 
   it('returns empty array when both are null', () => {
@@ -70,5 +80,14 @@ describe('diffProps', () => {
     const prev = { children: 'hello' };
     const next = { children: 'world' };
     expect(diffProps(prev, next)).toEqual(['children']);
+  });
+});
+
+describe('compareProps', () => {
+  it('splits value changes from reference-only changes', () => {
+    const onPress = (): void => {};
+    const prev = { style: { flex: 1 }, label: 'a', onPress };
+    const next = { style: { flex: 1 }, label: 'b', onPress };
+    expect(compareProps(prev, next)).toEqual({ changed: ['label'], referenceOnly: ['style'] });
   });
 });

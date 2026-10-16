@@ -1,12 +1,8 @@
-type ContextDependency = {
-  context: { displayName?: string };
-  memoizedValue: unknown;
-  next: ContextDependency | null;
-} | null;
+import type { ContextDependency } from '../core/fiber';
 
 export function detectContextChange(
-  currentFirstContext: ContextDependency,
-  previousFirstContext: ContextDependency,
+  currentFirstContext: ContextDependency | null,
+  previousFirstContext: ContextDependency | null,
 ): string | null {
   let current = currentFirstContext;
   let previous = previousFirstContext;

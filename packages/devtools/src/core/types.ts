@@ -55,7 +55,11 @@ export type RenderReason =
   | { type: 'mount' }
   | { type: 'props-changed'; keys: string[] }
   | { type: 'state-changed' }
-  | { type: 'parent-rerender' }
+  | {
+      type: 'parent-rerender';
+      /** Props the parent passed as new objects/arrays with the same entries (e.g. inline `style`). */
+      referenceOnlyKeys?: string[];
+    }
   | { type: 'context-changed'; provider: string }
   | { type: 'force-update' };
 
