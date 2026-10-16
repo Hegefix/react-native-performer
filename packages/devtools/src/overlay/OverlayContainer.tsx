@@ -25,7 +25,7 @@ let idCounter = 0;
 
 export function OverlayContainer({ options }: OverlayContainerProps) {
   const [flashes, setFlashes] = useState<FlashData[]>([]);
-  const containerRef = useRef<View>(null);
+  const containerRef = useRef<React.ComponentRef<typeof View>>(null);
   // measureInWindow is window-relative; the overlay is not guaranteed to start at the window origin.
   const originRef = useRef({ x: 0, y: 0 });
 
@@ -138,8 +138,13 @@ function toFlash(
 }
 
 const styles = StyleSheet.create({
+  // Spelled out: RN 0.88 removed absoluteFillObject at runtime, and the spread silently yields nothing.
   container: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     zIndex: 999999,
   },
 });

@@ -16,8 +16,8 @@ export const StyleSheet = {
   create<T>(styles: T): T {
     return styles;
   },
+  // Only absoluteFill: RN 0.88 dropped absoluteFillObject, so library code must not depend on it.
   absoluteFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
-  absoluteFillObject: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   hairlineWidth: 1,
 };
 

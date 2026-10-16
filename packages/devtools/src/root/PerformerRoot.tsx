@@ -28,7 +28,7 @@ function PerformerLayer() {
   if (!isOwner) return null;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View style={styles.layer} pointerEvents="box-none">
       <OverlayHost />
       <HUDApp />
     </View>
@@ -79,3 +79,14 @@ function useLayerOwnership(): boolean {
 
   return owner === token;
 }
+
+const styles = StyleSheet.create({
+  // Explicit rather than StyleSheet.absoluteFill, whose shape has changed across RN versions.
+  layer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  },
+});
