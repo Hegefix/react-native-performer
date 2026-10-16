@@ -43,13 +43,7 @@
   ],
   "peerDependencies": {
     "react": ">=18.0.0",
-    "react-native": ">=0.74.0",
-    "react-native-reanimated": ">=3.0.0"
-  },
-  "peerDependenciesMeta": {
-    "react-native-reanimated": {
-      "optional": true
-    }
+    "react-native": ">=0.74.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
