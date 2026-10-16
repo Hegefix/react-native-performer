@@ -31,15 +31,28 @@ npm install --save-dev react-native-performer
 > TODO — API in progress.
 
 ```ts
-// Planned API, not yet implemented:
-import 'react-native-performer/auto';
+// index.js — must be the first import, before React renders and before any
+// AppRegistry.setWrapperComponentProvider call.
+import '@performer/devtools/auto';
+```
+
+`auto` attaches the commit hook and mounts the flash overlay and HUD above the app through
+`AppRegistry.setWrapperComponentProvider` (dev only). A wrapper provider the app sets later is
+composed, not replaced. For setups that don't go through AppRegistry, wrap the app manually:
+
+```tsx
+import { PerformerRoot } from '@performer/devtools';
+
+<PerformerRoot>
+  <App />
+</PerformerRoot>
 ```
 
 ## Roadmap
 
 - [ ] Commit hook attachment + fiber walk (probe validated)
 - [ ] Prop diff attribution (which prop changed, reference vs value)
-- [ ] Host instance resolution + Reanimated-driven flash overlay
+- [x] Host instance resolution (Fabric + Paper) + flash overlay
 - [ ] Draggable HUD with top-N rerendering components
 - [ ] Example Expo app demonstrating inline-object / missing-memo anti-patterns
 - [ ] Opt-out filters (skip host components, skip navigation internals)
